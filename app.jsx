@@ -59,26 +59,33 @@ const ImageManager = () => {
 
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [images, showConfirm, handleSelection]);
+  }, [images, showConfirm, autoAdvance]);
 
-  const handleSelection = async (type) => {
+  // type: 'copy' | 'delete'
+  // imgPath: optional image path to toggle (if not provided, uses currentImage)
+  const handleSelection = async (type, imgPath = null) => {
     const newSelections = { ...selections };
-    const currentImg = images[currentIndex];
-    const prevSel = selections[currentImg];
+    const targetImg = imgPath || images[currentIndex];
+    const prevSel = selections[targetImg];
 
     // Toggle off if clicking the same selection
-    if (newSelections[currentImg] === type) {
-      delete newSelections[currentImg];
+    if (newSelections[targetImg] === type) {
+      delete newSelections[targetImg];
     } else {
-      newSelections[currentImg] = type;
+      newSelections[targetImg] = type;
     }
 
     setSelections(newSelections);
     await window.electron.saveSelections(folderPath, newSelections);
 
     // Auto-advance only when selecting (not unselecting) and when enabled
-    const justSelected = prevSel !== type && newSelections[currentImg] === type;
-    if (autoAdvance && justSelected && currentIndex < images.length - 1) {
+    const justSelected = prevSel !== type && newSelections[targetImg] === type;
+    if (
+      !imgPath &&
+      autoAdvance &&
+      justSelected &&
+      currentIndex < images.length - 1
+    ) {
       setTimeout(() => {
         setCurrentIndex((i) => Math.min(images.length - 1, i + 1));
       }, 200);
@@ -161,7 +168,12 @@ const ImageManager = () => {
           </div>
 
           {/* Virtualized grid to avoid rendering thousands of images at once */}
-          <VirtualizedGrid images={imagesToProcess} />
+          <VirtualizedGrid
+            images={imagesToProcess}
+            actionType={showConfirm}
+            selections={selections}
+            onToggle={handleSelection}
+          />
 
           <div className="p-6 border-t flex gap-3 justify-end">
             <button
@@ -225,51 +237,18 @@ const ImageManager = () => {
       </div>
 
       <div className="flex-1 flex items-center justify-center p-8 relative overflow-hidden">
-        <div
-          className="relative cursor-pointer"
-          onClick={(e) => {
-            // Click to toggle copy; Shift+Click to toggle delete
-            if (e.shiftKey) {
-              handleSelection("delete");
-            } else {
-              handleSelection("copy");
-            }
-          }}
-          title="Click to toggle Copy (Shift+Click for Delete)"
-        >
-          <img
-            src={`file://${currentImage}`}
-            alt="Current"
-            className={`max-w-full max-h-full object-contain rounded-lg shadow-2xl ${
-              currentSelection === "copy"
-                ? "ring-8 ring-blue-500"
-                : currentSelection === "delete"
-                ? "ring-8 ring-red-500"
-                : ""
-            }`}
-            style={{ maxWidth: "90vw", maxHeight: "80vh" }}
-          />
-
-          {/* selection badge / checkbox */}
-          <div className="absolute top-3 right-3">
-            <div
-              className={
-                `w-9 h-9 rounded-full flex items-center justify-center text-white text-sm shadow-lg border-2` +
-                (currentSelection === "copy"
-                  ? " bg-blue-600 border-white"
-                  : currentSelection === "delete"
-                  ? " bg-red-600 border-white"
-                  : " bg-white border-gray-300 text-gray-800")
-              }
-            >
-              {currentSelection === "copy"
-                ? "📋"
-                : currentSelection === "delete"
-                ? "🗑️"
-                : "✓"}
-            </div>
-          </div>
-        </div>
+        <img
+          src={`file://${currentImage}`}
+          alt="Current"
+          className={`max-w-full max-h-full object-contain rounded-lg shadow-2xl ${
+            currentSelection === "copy"
+              ? "ring-8 ring-blue-500"
+              : currentSelection === "delete"
+              ? "ring-8 ring-red-500"
+              : ""
+          }`}
+          style={{ maxWidth: "90vw", maxHeight: "80vh" }}
+        />
 
         <button
           onClick={() => currentIndex > 0 && setCurrentIndex(currentIndex - 1)}
@@ -343,7 +322,7 @@ const ImageManager = () => {
 ReactDOM.render(<ImageManager />, document.getElementById("root"));
 
 // Virtualized grid component for ConfirmDialog
-function VirtualizedGrid({ images }) {
+function VirtualizedGrid({ images, actionType, selections, onToggle }) {
   const containerRef = useRef(null);
   const [scrollTop, setScrollTop] = useState(0);
   const [containerHeight, setContainerHeight] = useState(400);
@@ -399,6 +378,29 @@ function VirtualizedGrid({ images }) {
               <div className="text-xs truncate mt-1">
                 {img.split(/[/\\]/).pop()}
               </div>
+
+              {/* selection checkbox badge */}
+              <button
+                onClick={() => onToggle(actionType, img)}
+                className={`absolute top-2 right-2 w-8 h-8 rounded-full flex items-center justify-center text-white text-xs shadow-lg border-2 focus:outline-none ${
+                  selections[img] === "copy"
+                    ? "bg-blue-600 border-white"
+                    : selections[img] === "delete"
+                    ? "bg-red-600 border-white"
+                    : "bg-white border-gray-300 text-gray-800"
+                }`}
+                title={
+                  selections[img]
+                    ? `Selected (${selections[img]}) - click to unselect`
+                    : "Not selected"
+                }
+              >
+                {selections[img] === "copy"
+                  ? "📋"
+                  : selections[img] === "delete"
+                  ? "🗑️"
+                  : "✓"}
+              </button>
             </div>
           );
         })}
