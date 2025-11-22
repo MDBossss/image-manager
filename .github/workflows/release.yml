@@ -1,0 +1,38 @@
+name: Build and release Windows EXE
+
+on:
+  push:
+    branches:
+      - master
+
+jobs:
+  build:
+    name: Build on Windows and create release
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build Windows installer (nsis)
+        run: npm run build -- --win nsis --x64
+        env:
+          # electron-builder can publish directly when provided with a token.
+          # We don't require additional secrets to upload a release asset because
+          # the steps below will use the provided GITHUB_TOKEN.
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create GitHub Release and upload assets
+        uses: softprops/action-gh-release@v1
+        with:
+          files: dist/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
