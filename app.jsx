@@ -20,7 +20,18 @@ const ImageManager = () => {
     // Load saved selections
     const savedSelections = await window.electron.loadSelections(folder);
     setSelections(savedSelections);
-    setCurrentIndex(0);
+
+    // Find last marked image (copy or delete)
+    let lastMarkedIdx = 0;
+    if (imageList.length > 0) {
+      for (let i = imageList.length - 1; i >= 0; i--) {
+        if (savedSelections[imageList[i]]) {
+          lastMarkedIdx = i;
+          break;
+        }
+      }
+    }
+    setCurrentIndex(lastMarkedIdx);
   };
 
   // Keyboard shortcuts:
@@ -64,32 +75,36 @@ const ImageManager = () => {
   // type: 'copy' | 'delete'
   // imgPath: optional image path to toggle (if not provided, uses currentImage)
   const handleSelection = async (type, imgPath = null) => {
-    const newSelections = { ...selections };
-    const targetImg = imgPath || images[currentIndex];
-    const prevSel = selections[targetImg];
+    // Only update the selection for the target image, leave others untouched
+    setSelections((prevSelections) => {
+      const targetImg = imgPath || images[currentIndex];
+      const prevSel = prevSelections[targetImg];
+      const newSelections = { ...prevSelections };
 
-    // Toggle off if clicking the same selection
-    if (newSelections[targetImg] === type) {
-      delete newSelections[targetImg];
-    } else {
-      newSelections[targetImg] = type;
-    }
+      if (newSelections[targetImg] === type) {
+        delete newSelections[targetImg];
+      } else {
+        newSelections[targetImg] = type;
+      }
 
-    setSelections(newSelections);
-    await window.electron.saveSelections(folderPath, newSelections);
+      // Save to disk
+      window.electron.saveSelections(folderPath, newSelections);
 
-    // Auto-advance only when selecting (not unselecting) and when enabled
-    const justSelected = prevSel !== type && newSelections[targetImg] === type;
-    if (
-      !imgPath &&
-      autoAdvance &&
-      justSelected &&
-      currentIndex < images.length - 1
-    ) {
-      setTimeout(() => {
-        setCurrentIndex((i) => Math.min(images.length - 1, i + 1));
-      }, 200);
-    }
+      // Auto-advance only when selecting (not unselecting) and when enabled
+      const justSelected =
+        prevSel !== type && newSelections[targetImg] === type;
+      if (
+        !imgPath &&
+        autoAdvance &&
+        justSelected &&
+        currentIndex < images.length - 1
+      ) {
+        setTimeout(() => {
+          setCurrentIndex((i) => Math.min(images.length - 1, i + 1));
+        }, 200);
+      }
+      return newSelections;
+    });
   };
 
   const getFilteredImages = (type) => {
@@ -129,7 +144,7 @@ const ImageManager = () => {
   };
 
   const currentImage = images[currentIndex];
-  const currentSelection = selections[currentImage];
+  const currentSelection = selections[currentImage] || null;
   const copyCount = getFilteredImages("copy").length;
   const deleteCount = getFilteredImages("delete").length;
 
@@ -218,8 +233,22 @@ const ImageManager = () => {
           <span className="px-3 py-1 bg-red-600 rounded-full text-sm">
             Delete: {deleteCount}
           </span>
-          <span className="px-3 py-1 bg-gray-700 rounded-full text-sm">
-            {currentIndex + 1} / {images.length}
+          <span className="px-3 py-1 bg-gray-700 rounded-full text-sm flex items-center gap-2">
+            <input
+              type="number"
+              min={1}
+              max={images.length}
+              value={currentIndex + 1}
+              onChange={(e) => {
+                let idx = parseInt(e.target.value, 10) - 1;
+                if (isNaN(idx)) idx = 0;
+                idx = Math.max(0, Math.min(images.length - 1, idx));
+                setCurrentIndex(idx);
+              }}
+              className="w-16 px-2 py-1 rounded bg-gray-800 text-white border border-gray-600 text-center focus:outline-none"
+              style={{ width: "3.5em" }}
+            />
+            / {images.length}
           </span>
 
           <button
@@ -276,8 +305,8 @@ const ImageManager = () => {
             <button
               onClick={() => handleSelection("copy")}
               className={`flex-1 py-4 rounded-lg font-semibold transition-all ${
-                currentSelection === "copy"
-                  ? "bg-blue-600 text-white"
+                selections[currentImage] === "copy"
+                  ? "bg-blue-600 text-white ring-4 ring-blue-400"
                   : "bg-gray-700 text-white hover:bg-gray-600"
               }`}
             >
@@ -287,8 +316,8 @@ const ImageManager = () => {
             <button
               onClick={() => handleSelection("delete")}
               className={`flex-1 py-4 rounded-lg font-semibold transition-all ${
-                currentSelection === "delete"
-                  ? "bg-red-600 text-white"
+                selections[currentImage] === "delete"
+                  ? "bg-red-600 text-white ring-4 ring-red-400"
                   : "bg-gray-700 text-white hover:bg-gray-600"
               }`}
             >
