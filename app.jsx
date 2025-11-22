@@ -57,20 +57,12 @@ const ImageManager = () => {
       } else if (e.key === "ArrowRight") {
         e.preventDefault();
         setCurrentIndex((prev) => Math.min(images.length - 1, prev + 1));
-      } else if (e.key === "c" || e.key === "C") {
-        e.preventDefault();
-        // Toggle copy selection for current image
-        handleSelection("copy");
-      } else if (e.key === "d" || e.key === "D") {
-        e.preventDefault();
-        // Toggle delete selection for current image
-        handleSelection("delete");
       }
     };
 
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [images, showConfirm, autoAdvance]);
+  }, [images, showConfirm]);
 
   // type: 'copy' | 'delete'
   // imgPath: optional image path to toggle (if not provided, uses currentImage)
@@ -227,10 +219,10 @@ const ImageManager = () => {
           <p className="text-sm text-gray-400">{folderPath}</p>
         </div>
         <div className="flex gap-4">
-          <span className="px-3 py-1 bg-blue-600 rounded-full text-sm">
+          <span className="flex items-center px-3 py-1 bg-blue-600 rounded-full text-sm">
             Copy: {copyCount}
           </span>
-          <span className="px-3 py-1 bg-red-600 rounded-full text-sm">
+          <span className="flex items-center px-3 py-1 bg-red-600 rounded-full text-sm">
             Delete: {deleteCount}
           </span>
           <span className="px-3 py-1 bg-gray-700 rounded-full text-sm flex items-center gap-2">
@@ -266,18 +258,20 @@ const ImageManager = () => {
       </div>
 
       <div className="flex-1 flex items-center justify-center p-8 relative overflow-hidden">
-        <img
-          src={`file://${currentImage}`}
-          alt="Current"
-          className={`max-w-full max-h-full object-contain rounded-lg shadow-2xl ${
-            currentSelection === "copy"
-              ? "ring-8 ring-blue-500"
-              : currentSelection === "delete"
-              ? "ring-8 ring-red-500"
-              : ""
-          }`}
-          style={{ maxWidth: "90vw", maxHeight: "80vh" }}
-        />
+        <div style={{ paddingTop: 10, paddingBottom: 10 }}>
+          <img
+            src={`file://${currentImage}`}
+            alt="Current"
+            className={`max-w-full max-h-full object-contain rounded-lg shadow-2xl ${
+              currentSelection === "copy"
+                ? "ring-8 ring-blue-500"
+                : currentSelection === "delete"
+                ? "ring-8 ring-red-500"
+                : ""
+            }`}
+            style={{ maxWidth: "90vw", maxHeight: "80vh" }}
+          />
+        </div>
 
         <button
           onClick={() => currentIndex > 0 && setCurrentIndex(currentIndex - 1)}
@@ -412,23 +406,20 @@ function VirtualizedGrid({ images, actionType, selections, onToggle }) {
               <button
                 onClick={() => onToggle(actionType, img)}
                 className={`absolute top-2 right-2 w-8 h-8 rounded-full flex items-center justify-center text-white text-xs shadow-lg border-2 focus:outline-none ${
-                  selections[img] === "copy"
-                    ? "bg-blue-600 border-white"
-                    : selections[img] === "delete"
+                  actionType === "copy"
                     ? "bg-red-600 border-white"
-                    : "bg-white border-gray-300 text-gray-800"
+                    : "bg-red-600 border-white"
                 }`}
                 title={
-                  selections[img]
-                    ? `Selected (${selections[img]}) - click to unselect`
-                    : "Not selected"
+                  actionType === "copy"
+                    ? "Remove from Copy"
+                    : "Remove from Delete"
                 }
               >
-                {selections[img] === "copy"
-                  ? "📋"
-                  : selections[img] === "delete"
-                  ? "🗑️"
-                  : "✓"}
+                {/* Show trash can for both actions, or a red cross for copy if you prefer */}
+                <span style={{ fontSize: "1.3em" }}>
+                  {actionType === "copy" ? "✖️" : "🗑️"}
+                </span>
               </button>
             </div>
           );
