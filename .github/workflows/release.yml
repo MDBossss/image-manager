@@ -24,19 +24,22 @@ jobs:
         with:
           node-version: "20"
 
-      - name: Create a unique tag and push (version + short SHA)
-        id: create_tag
-        # Use bash on the Windows runner because the script uses bash-style syntax
+      - name: Bump package version (patch) and push tag
+        id: bump_version
         shell: bash
         run: |
-          VERSION=$(node -p "require('./package.json').version")
-          SHORT=${GITHUB_SHA::7}
-          TAG="v${VERSION}-${SHORT}"
-          echo "Creating tag $TAG"
+          # Bump patch version (change `patch` to `minor` or `major` if desired)
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git tag -a "$TAG" -m "CI Release $TAG"
-          git push origin "$TAG"
+
+          # Use npm to bump version which will create a commit and tag (vX.Y.Z)
+          npm version patch -m "chore(release): %s"
+
+          # Push commit and tag using the GITHUB_TOKEN so this push does not re-trigger workflows
+          git push "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" --follow-tags
+
+          # Get the newly created tag
+          TAG=$(git describe --tags --abbrev=0)
           echo "tag=$TAG" >> $GITHUB_OUTPUT
 
       - name: Install dependencies
@@ -51,6 +54,6 @@ jobs:
         uses: softprops/action-gh-release@v1
         with:
           files: dist/*
-          tag_name: ${{ steps.create_tag.outputs.tag }}
+          tag_name: ${{ steps.bump_version.outputs.tag }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

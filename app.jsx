@@ -1,4 +1,4 @@
-const { useState, useEffect } = React;
+const { useState, useEffect, useRef } = React;
 
 const ImageManager = () => {
   const [images, setImages] = useState([]);
@@ -7,6 +7,7 @@ const ImageManager = () => {
   const [folderPath, setFolderPath] = useState("");
   const [showConfirm, setShowConfirm] = useState(null);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [autoAdvance, setAutoAdvance] = useState(true);
 
   const handleFolderSelect = async () => {
     const folder = await window.electron.selectFolder();
@@ -22,9 +23,48 @@ const ImageManager = () => {
     setCurrentIndex(0);
   };
 
+  // Keyboard shortcuts:
+  // - ArrowLeft / ArrowRight to navigate images
+  // - 'c' to toggle Add to Copy
+  // - 'd' to toggle Add to Delete
+  useEffect(() => {
+    const onKeyDown = (e) => {
+      // Ignore when typing in inputs or when confirm dialog is open
+      const target = e.target;
+      if (
+        (target &&
+          (target.tagName === "INPUT" || target.tagName === "TEXTAREA")) ||
+        (target && target.isContentEditable) ||
+        showConfirm
+      ) {
+        return;
+      }
+
+      if (e.key === "ArrowLeft") {
+        e.preventDefault();
+        setCurrentIndex((prev) => Math.max(0, prev - 1));
+      } else if (e.key === "ArrowRight") {
+        e.preventDefault();
+        setCurrentIndex((prev) => Math.min(images.length - 1, prev + 1));
+      } else if (e.key === "c" || e.key === "C") {
+        e.preventDefault();
+        // Toggle copy selection for current image
+        handleSelection("copy");
+      } else if (e.key === "d" || e.key === "D") {
+        e.preventDefault();
+        // Toggle delete selection for current image
+        handleSelection("delete");
+      }
+    };
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [images, showConfirm, handleSelection]);
+
   const handleSelection = async (type) => {
     const newSelections = { ...selections };
     const currentImg = images[currentIndex];
+    const prevSel = selections[currentImg];
 
     // Toggle off if clicking the same selection
     if (newSelections[currentImg] === type) {
@@ -36,9 +76,12 @@ const ImageManager = () => {
     setSelections(newSelections);
     await window.electron.saveSelections(folderPath, newSelections);
 
-    // Auto-advance only when selecting (not unselecting)
-    if (selections[currentImg] !== type && currentIndex < images.length - 1) {
-      setTimeout(() => setCurrentIndex(currentIndex + 1), 200);
+    // Auto-advance only when selecting (not unselecting) and when enabled
+    const justSelected = prevSel !== type && newSelections[currentImg] === type;
+    if (autoAdvance && justSelected && currentIndex < images.length - 1) {
+      setTimeout(() => {
+        setCurrentIndex((i) => Math.min(images.length - 1, i + 1));
+      }, 200);
     }
   };
 
@@ -117,22 +160,8 @@ const ImageManager = () => {
             </p>
           </div>
 
-          <div className="p-6 overflow-y-auto max-h-96">
-            <div className="grid grid-cols-3 gap-4">
-              {imagesToProcess.map((img, idx) => (
-                <div key={idx} className="relative">
-                  <img
-                    src={`file://${img}`}
-                    alt={`Preview ${idx}`}
-                    className="w-full h-32 object-cover rounded"
-                  />
-                  <div className="text-xs truncate mt-1">
-                    {img.split(/[/\\]/).pop()}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
+          {/* Virtualized grid to avoid rendering thousands of images at once */}
+          <VirtualizedGrid images={imagesToProcess} />
 
           <div className="p-6 border-t flex gap-3 justify-end">
             <button
@@ -180,22 +209,67 @@ const ImageManager = () => {
           <span className="px-3 py-1 bg-gray-700 rounded-full text-sm">
             {currentIndex + 1} / {images.length}
           </span>
+
+          <button
+            onClick={() => setAutoAdvance((v) => !v)}
+            className={`px-3 py-1 rounded-full text-sm border ${
+              autoAdvance
+                ? "bg-green-600 text-white border-green-600"
+                : "bg-gray-700 text-white border-gray-600"
+            }`}
+            title="Toggle auto-advance"
+          >
+            Auto-advance: {autoAdvance ? "On" : "Off"}
+          </button>
         </div>
       </div>
 
       <div className="flex-1 flex items-center justify-center p-8 relative overflow-hidden">
-        <img
-          src={`file://${currentImage}`}
-          alt="Current"
-          className={`max-w-full max-h-full object-contain rounded-lg shadow-2xl ${
-            currentSelection === "copy"
-              ? "ring-8 ring-blue-500"
-              : currentSelection === "delete"
-              ? "ring-8 ring-red-500"
-              : ""
-          }`}
-          style={{ maxWidth: "90vw", maxHeight: "80vh" }}
-        />
+        <div
+          className="relative cursor-pointer"
+          onClick={(e) => {
+            // Click to toggle copy; Shift+Click to toggle delete
+            if (e.shiftKey) {
+              handleSelection("delete");
+            } else {
+              handleSelection("copy");
+            }
+          }}
+          title="Click to toggle Copy (Shift+Click for Delete)"
+        >
+          <img
+            src={`file://${currentImage}`}
+            alt="Current"
+            className={`max-w-full max-h-full object-contain rounded-lg shadow-2xl ${
+              currentSelection === "copy"
+                ? "ring-8 ring-blue-500"
+                : currentSelection === "delete"
+                ? "ring-8 ring-red-500"
+                : ""
+            }`}
+            style={{ maxWidth: "90vw", maxHeight: "80vh" }}
+          />
+
+          {/* selection badge / checkbox */}
+          <div className="absolute top-3 right-3">
+            <div
+              className={
+                `w-9 h-9 rounded-full flex items-center justify-center text-white text-sm shadow-lg border-2` +
+                (currentSelection === "copy"
+                  ? " bg-blue-600 border-white"
+                  : currentSelection === "delete"
+                  ? " bg-red-600 border-white"
+                  : " bg-white border-gray-300 text-gray-800")
+              }
+            >
+              {currentSelection === "copy"
+                ? "📋"
+                : currentSelection === "delete"
+                ? "🗑️"
+                : "✓"}
+            </div>
+          </div>
+        </div>
 
         <button
           onClick={() => currentIndex > 0 && setCurrentIndex(currentIndex - 1)}
@@ -267,3 +341,69 @@ const ImageManager = () => {
 };
 
 ReactDOM.render(<ImageManager />, document.getElementById("root"));
+
+// Virtualized grid component for ConfirmDialog
+function VirtualizedGrid({ images }) {
+  const containerRef = useRef(null);
+  const [scrollTop, setScrollTop] = useState(0);
+  const [containerHeight, setContainerHeight] = useState(400);
+
+  const cols = 3;
+  const itemHeight = 156; // estimated row height in px (image + label + gap)
+
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+
+    const onScroll = () => setScrollTop(el.scrollTop);
+    onScroll();
+    setContainerHeight(el.clientHeight);
+    el.addEventListener("scroll", onScroll);
+    const ro = new ResizeObserver(() => setContainerHeight(el.clientHeight));
+    ro.observe(el);
+
+    return () => {
+      el.removeEventListener("scroll", onScroll);
+      ro.disconnect();
+    };
+  }, []);
+
+  const rows = Math.ceil(images.length / cols);
+  const visibleRows = Math.ceil(containerHeight / itemHeight) || 6;
+  const buffer = 3;
+  const startRow = Math.max(0, Math.floor(scrollTop / itemHeight) - buffer);
+  const endRow = Math.min(rows, startRow + visibleRows + buffer * 2);
+
+  const startIndex = startRow * cols;
+  const endIndex = Math.min(images.length, endRow * cols);
+
+  const topSpacer = startRow * itemHeight;
+  const bottomSpacer = Math.max(0, (rows - endRow) * itemHeight);
+
+  const visible = images.slice(startIndex, endIndex);
+
+  return (
+    <div className="p-6 overflow-y-auto max-h-96" ref={containerRef}>
+      <div style={{ height: topSpacer }} />
+      <div className="grid grid-cols-3 gap-4">
+        {visible.map((img, i) => {
+          const idx = startIndex + i;
+          return (
+            <div key={idx} className="relative">
+              <img
+                src={`file://${img}`}
+                alt={`Preview ${idx}`}
+                className="w-full h-32 object-cover rounded"
+                loading="lazy"
+              />
+              <div className="text-xs truncate mt-1">
+                {img.split(/[/\\]/).pop()}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      <div style={{ height: bottomSpacer }} />
+    </div>
+  );
+}
