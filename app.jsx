@@ -183,7 +183,7 @@ const ImageManager = () => {
         </div>
       </div>
 
-      <div className="flex-1 flex items-center justify-center p-8 relative">
+      <div className="flex-1 flex items-center justify-center p-8 relative overflow-hidden">
         <img
           src={`file://${currentImage}`}
           alt="Current"
@@ -194,6 +194,7 @@ const ImageManager = () => {
               ? "ring-8 ring-red-500"
               : ""
           }`}
+          style={{ maxWidth: "90vw", maxHeight: "80vh" }}
         />
 
         <button
