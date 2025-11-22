@@ -26,6 +26,8 @@ jobs:
 
       - name: Create a unique tag and push (version + short SHA)
         id: create_tag
+        # Use bash on the Windows runner because the script uses bash-style syntax
+        shell: bash
         run: |
           VERSION=$(node -p "require('./package.json').version")
           SHORT=${GITHUB_SHA::7}
